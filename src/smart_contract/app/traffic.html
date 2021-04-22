@@ -1,0 +1,1074 @@
+<!DOCTYPE html>
+<html lang="en" xmlns="http://www.w3.org/1999/xhtml">
+<head>
+    <title>Traffic</title>
+
+	<style>
+		html,body{
+			width: 100%;
+			height: 100%;
+		}
+		#row1{float:left;display: inline ;}
+		body{background: #ecf0f1;color: #34495e;text-shadow: white 1px 1px 1px;}.value{text-align: middle;font-weight: bold;width: 210px;line-height: 60px;margin: -18px auto;letter-spacing: -0.07em;text-shadow: white 2px 2px 2px;}input[type="range"] {display: block;-webkit-appearance: none;background-color: #bdc3c7;width: 100%;height: 10px;border-radius: 5px;margin: 5px auto;outline: 0;}input[type="range"]::-webkit-slider-thumb {-webkit-appearance: none;background-color: #e74c3c;width: 30px;height: 30px;border-radius: 50%;border: 2px solid white;cursor: pointer;transition: 0.3s ease-in-out;}.range{position:relative;width:60%;margin:0 auto;} 
+		#map{width: 100%;height:98%}		
+	</style>
+
+	<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="X-UA-Compatible" content="ie=edge">
+    <link rel="stylesheet" type="text/css" href="main.css">
+
+	<link rel="stylesheet" href="leaflet.css" />
+	<link rel="stylesheet" href="leaflet.label.css" />
+	<script src="leaflet-src-Geohash.js"></script>
+	<script src="leaflet.label-src.js"></script>
+	<script src="leaflet.label.js"></script>
+	<script src="OSMBuildings-Leaflet.debug.js"></script>
+
+	<script src="./node_modules/web3/dist/web3.min.js"></script>
+    <script src="./geohash-new.js"></script>
+    <script src="./geolib.js"></script>
+    <script src="./common.js"></script>
+	<script src="GeohashLayer.GeoJSON.js"></script>
+	<script src="https://s3.pstatp.com/cdn/expire-1-M/jquery/3.2.1/jquery.min.js"></script>
+
+	<script src="./gpsarray.js"></script>
+	<script src="./waysall.js"></script>
+
+
+<script type="text/javascript">
+
+//Map contract
+var mapContractAccount = ''; 
+var mapContractAbi = [];
+var mapContractAddress = '';
+var mapContractServer = '';
+var mapContract;
+
+//Traffic contract
+var trafficContractAbi = [{
+      "constant": false,
+      "inputs": [
+        {
+          "internalType": "string",
+          "name": "uuid",
+          "type": "string"
+        }
+      ],
+      "name": "revalue",
+      "outputs": [],
+      "payable": false,
+      "stateMutability": "nonpayable",
+      "type": "function"
+    },
+    {
+      "constant": true,
+      "inputs": [
+        {
+          "internalType": "string",
+          "name": "uuid",
+          "type": "string"
+        }
+      ],
+      "name": "getQuality",
+      "outputs": [
+        {
+          "internalType": "int256",
+          "name": "",
+          "type": "int256"
+        }
+      ],
+      "payable": false,
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "constant": true,
+      "inputs": [
+        {
+          "internalType": "string",
+          "name": "uuid",
+          "type": "string"
+        }
+      ],
+      "name": "getSinglePos",
+      "outputs": [
+        {
+          "internalType": "uint256",
+          "name": "",
+          "type": "uint256"
+        },
+        {
+          "internalType": "uint256",
+          "name": "",
+          "type": "uint256"
+        },
+        {
+          "internalType": "uint256",
+          "name": "",
+          "type": "uint256"
+        },
+        {
+          "internalType": "uint256",
+          "name": "",
+          "type": "uint256"
+        },
+        {
+          "internalType": "uint256",
+          "name": "",
+          "type": "uint256"
+        }
+      ],
+      "payable": false,
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "constant": false,
+      "inputs": [
+        {
+          "internalType": "string",
+          "name": "uuid",
+          "type": "string"
+        },
+        {
+          "internalType": "uint256",
+          "name": "time",
+          "type": "uint256"
+        },
+        {
+          "internalType": "uint256",
+          "name": "_latOri",
+          "type": "uint256"
+        },
+        {
+          "internalType": "uint256",
+          "name": "_lonOri",
+          "type": "uint256"
+        },
+        {
+          "internalType": "uint256",
+          "name": "_latFix",
+          "type": "uint256"
+        },
+        {
+          "internalType": "uint256",
+          "name": "_lonFix",
+          "type": "uint256"
+        }
+      ],
+      "name": "setSinglePos",
+      "outputs": [],
+      "payable": false,
+      "stateMutability": "nonpayable",
+      "type": "function"
+    }];
+var trafficContractAccount = '0x6E01DF10C7981D80Cf512D8b1c36aBD276909021'; 
+var trafficContractAddress = '0x00f4dD5b19Ba8272a6eE52e13eAca27689d6Cc3D';
+var trafficContractServer = 'http://localhost:8545';
+var trafficContract;
+
+//Contract Init
+function initContract() {
+	if (typeof web3 !== 'undefined') {
+	    //var web3Map = new Web3(web3.currentProvider);
+	    var web3Traffic = new Web3(web3.currentProvider);
+	} else {
+	    //var web3Map = new Web3(new Web3.providers.HttpProvider(mapContractServer));
+	    var web3Traffic = new Web3(new Web3.providers.HttpProvider(trafficContractServer));
+	}
+	//mapContract = new web3Map.eth.Contract(mapContractAbi,mapContractAddress);
+	trafficContract = new web3Traffic.eth.Contract(trafficContractAbi,trafficContractAddress);
+	console.log("OK!");
+}
+
+//user id
+var userId;
+var localStorage;
+
+//init user id
+if(!window.localStorage){
+    alert('This browser does NOT support localStorage');
+}
+if (!localStorage.getItem("uuid")){
+    userId = generateUUID();
+    localStorage.setItem("uuid",userId);
+}
+else{
+    userId = localStorage.getItem("uuid");
+}
+console.log(userId);
+
+//road buffer
+var roadsBuffer = [];
+var roadsGeoBuffer = [];
+var geo2index = {};
+var bufferMax = 50;
+var bufferNum = 0;
+var bufferEnd = 0;
+//map
+var map;
+
+// 这个函数目前没有使用
+function getRoads(geohash) {
+	if (geohash in geo2index) {
+		return Promise.resolve(roadsBuffer[geo2index[geohash]]);
+	}
+
+	var roads = new Array();
+	return mapContract.methods.getRoads(geohash).call(function(error, result){
+                if(!error) {
+                    console.log(result);
+                    var roadInfo = result[0];
+                    var roadName = result[1];
+                    var roadPath = result[2];
+
+                    var pointer = 0;
+                    for (var i = 0; i < roadName.length; i++){
+
+                    }
+
+                    if (bufferNum == bufferMax) {
+                    	delete geo2index[roadsGeoBuffer[bufferEnd]];
+                    	bufferNum--;
+                    }
+                    roadsGeoBuffer[bufferEnd] = geohash;
+                    roadsBuffer[bufferEnd] = roads;
+                    geo2index[geohash] = bufferEnd;
+                    bufferEnd++;
+                    bufferNum++;
+                    if (bufferEnd == bufferMax) {
+                    	bufferEnd = 0;
+                    }
+                    return roads;
+                } else
+                    console.error(error);
+            });	
+}
+
+//location buffer
+var locBuffer = [];
+var locBufferFix = [];
+var locBufferGid = [];
+var locBufferDirection = [];
+var locBufferOffset = [];
+var locBufferType = [];
+var locbufferDistance = [];
+var locTime = [];
+
+var locBufferMax = 100;
+var locBufferNum = 0;
+var locBufferEnd = 0;
+var matchingWindow = new Array();
+var windowBound = 10;
+var range = 100;
+var cosTheta = 0.86; //30 degree
+
+var latitude;
+var longitude;
+
+var currentRoad;
+var currentGid = -1;
+var direction;
+
+var n;
+var nowCalc;
+var roadNum;
+var quality = 0;
+
+// 获取当前位置，目前也没有使用
+function getLocation() {
+    if (navigator.geolocation) { 
+        navigator.geolocation.getCurrentPosition(showPosition);
+    }
+}
+
+// 显示位置，目前没有使用
+function showPosition(position) {
+    latitude = position.coords.latitude;
+    longitude = position.coords.longitude;
+    console.log(position.coords.latitude);
+    console.log(position.coords.longitude);
+}
+
+
+// 获取当前时间，使用Date类
+function getTime() {
+    var t_date = new Date();
+    var t_time = t_date.getTime();            
+    return t_time;
+}
+
+// 判断投影夹角
+function compareTheta(a1, a2, b1, b2) {
+	return 0;
+}
+
+// 判断单行
+function compareOneway(a1, a2, b1, b2) {
+	return 1;
+}
+
+// 这个函数目前没有被调用
+function isRoute(road1, road2) {
+	if(road1.gid == road2.gid){
+		return true;
+	}
+	var type = 0;
+	if(road1.source == road2.source){
+		type = 1;
+	}
+	else if(road1.source == road2.target){
+		type = 2;
+	}
+	else if(road1.target == road2.source){
+		type = 3;
+	}
+	else if(road1.target == road2.target){
+		type = 4;
+	}	
+
+	if(road1.oneway == 1){
+		if(road2.oneway == 1 && type == 3){
+			return true;
+		}
+		else if(road2.oneway == 0 && type >=3){
+			return true;
+		}
+	}
+	else if(road1.oneway == 0){
+		if(road2.oneway == 1 && (type == 1 || type == 3)){
+			return true;
+		}
+		else if(road2.oneway == 0 && type > 0){
+			return true;
+		}
+	}
+
+	return false;	
+}
+
+function getBestMatch2(index, candidates) {
+	candidates.sort(function (a, b) {
+		return b[2] - a[2];
+	})
+	var candidateIndex = -1;
+
+	if (currentGid == -1) {
+		return candidates[0];
+	}
+
+	for (var i = 0; i < candidates.length; i++) {
+		var road = candidates[i][0];
+		if (road.oneway == 1) {
+			if ((road.gid == currentGid) && 
+				(locbufferDistance[index - 1] - locbufferDistance[index] > 1)) {
+				continue;
+			}
+		}
+		if (candidateIndex == -1) {
+			candidateIndex = i;
+			return candidates[candidateIndex];
+		}
+		//if (isRoute(road, currentRoad)) {
+		//	return candidates[i];
+		//}
+	}
+	return candidates[candidateIndex];
+}
+
+function getBestMatch(index, candidates) {
+	var prepos;
+	if (index == 0) {
+		propos = locBuffer[index];
+	} else {
+		propos = locBuffer[index - 1];
+	}
+
+	for (var i = 0; i < candidates.length; i++) {
+		var evaluate = candidates[i][1][0] + 0.1;
+		road = candidates[i][0];
+		
+		//投影在外面
+		if (candidates[i][1][2][1] > 0) {
+			evaluate = evaluate * 1.5;
+		}
+		//夹角
+		if ((propos != locBuffer[index]) && 
+			(compareTheta(propos, locBuffer[index], 
+				          road.path[candidates[i][1][1]], road.path[candidates[i][1][1] + 1]) == 1)) {
+			evaluate = evaluate * 0.7;
+		}
+		//oneway
+		if (road.oneway == 1) {
+			if (compareOneway(propos, locBuffer[index], 
+				          road.path[candidates[i][1][1]], road.path[candidates[i][1][1] + 1]) == 1) {
+				evaluate = evaluate;
+			} else {
+				evaluate = evaluate * 3;
+			}
+		}
+		//sameroad
+		if ((currentGid != -1) && (currentGid == road.gid)) {
+			evaluate = evaluate * 0.7;
+		}
+		candidates[i].push(range / evaluate);
+	}
+	candidates.sort(function (a, b) {
+		return (b[2] - a[2]);
+	});
+	return candidates[0];
+}
+
+function projection(index, road) {
+	var fixed;
+	//console.log("fixed road ", road);
+	var distance = 0;
+	if (road[1][2][1] == 0) {
+		fixed = getProjection(road[0].path[road[1][1]], road[0].path[road[1][1] + 1], locBuffer[index]);
+		distance = getDistanceByGeohash(fixed, road[0].path[road[1][1]]);
+	} else {
+		if (road[1][2][1] == 1) {
+			fixed = road[0].path[road[1][1]];
+			distance = 0;
+		} else {
+			fixed = road[0].path[road[1][1] + 1];
+			distance = getDistanceByGeohash(road[0].path[road[1][1]], road[0].path[road[1][1] + 1]);
+		}
+	}
+
+	var offset = 0;
+	var total = 0;
+	for (var i = 0; i < road[0].path.length - 1; i++) {
+		var temp = getDistanceByGeohash(road[0].path[i], road[0].path[i + 1]);
+		total = total + temp;
+		if (i < road[1][1]) {
+			distance = distance + temp;
+		}
+	}
+	offset = distance / total;
+	locBufferOffset[index] = offset;
+	locbufferDistance[index] = distance;
+
+	var inter_range = 50;
+	if (distance < inter_range) {
+		locBufferType[index] = 1;
+	} else if (total - distance < inter_range) {
+		locBufferType[index] = 2;
+	} else {
+		locBufferType[index] = 3;
+	}
+
+	locBufferFix[index] = fixed;
+	//console.log("fixed before ", locBuffer[index], "fixed ", locBufferFix[index]);
+	return fixed;
+}
+
+function removeDuplicate(candidates) {
+	return candidates;
+}
+
+// 求点到路的距离
+function getDisPointToRoad(road, point) {
+	var min = 9999999;
+	var which = 0;
+	var res = [];
+	for (var i = 0; i < road.path.length - 1; i++) {
+		var disRes = getDisPointToSegment(road.path[i], road.path[i + 1], point);
+		//console.log(road.path[i], road.path[i + 1], point, disRes);
+		if (disRes[0] < min) {
+			min = disRes[0];
+			which = i;
+			res = disRes;
+		}
+	}
+	return [min, which, res];
+}
+
+function rangeFilter(roads, index) {
+	//console.log("rangeFilter", locBuffer[index]);
+	var candidates = [];
+	//console.log(roads.length);
+	for (var i = 0; i < roads.length; i++) {
+		var road = roads[i];
+		var result = getDisPointToRoad(road, locBuffer[index]);
+		//console.log(result);
+		if (result[0] <= range) {
+			var prop = 0;
+			var c = 1;
+			if (result[2][1] > 0) {
+				c = 0.5;
+			}			
+			if (road.gid == currentGid) { 
+				if ((index == 0) || 
+					(locBufferDirection[index - 1] == 1) && (locBufferType[index - 1] == 2) ||
+					(locBufferDirection[index - 1] == 0) && (locBufferType[index - 1] == 1)) {
+					prop = range / (c * result[0] * 0.5 + 0.1);
+				} else {
+					prop = range / (c * result[0] * 1.5 + 0.1);
+				}
+			} else {
+				prop = range / (c * result[0] + 0.1);
+			}
+			candidates.push([road, result, prop]);  
+		}
+	}
+	//console.log(candidates);
+	//console.log(1);
+	return candidates;
+}
+
+function getCandidates(index) {
+	var candidates = [];
+	//console.log(roadsBuffer.length);
+	for (var i = 0; i < roadsBuffer.length; i++) {
+		candidates.push(roadsBuffer[i]);
+	}
+	candidates = removeDuplicate(candidates);
+	candidates = rangeFilter(candidates, index);
+	return candidates;
+}
+
+// 修正经纬度数据
+function match(index) {
+	//console.log("match ", index);
+	var candidates;
+	var fixed = "";
+	candidates = getCandidates(index);
+	//console.log("candidates");
+	//console.log(candidates);
+	if (candidates.length > 0) {
+		//var road = getBestMatch(index, candidates);
+		var road = getBestMatch2(index, candidates);
+		//console.log("road ", road);
+		if (typeof(road) != "undefined") {
+			currentRoad = road[0];
+			currentGid = road[0].gid;
+			locBufferGid[index] = road[0].gid;
+			fixed = projection(index, road);
+			if (index > 0) {
+				if ((currentGid != locBufferGid[index - 1]) && 
+					(locBufferType[index] == 1)) {
+					locBufferDirection[index] = 1;
+				} else if ((currentGid != locBufferGid[index - 1]) && 
+						   (locBufferType[index] == 2)) {
+					locBufferDirection[index] = 0;
+				} else if (locBufferOffset[index] >= locBufferOffset[index - 1]) {
+					locBufferDirection[index] = 1;
+				} else if (locBufferOffset[index] < locBufferOffset[index - 1]) {
+					locBufferDirection[index] = 0;
+				} else {
+					locBufferDirection[index] = -1;
+				}
+			}
+		}
+		//console.log(index, locBuffer[index], locBufferFix[index], locBufferGid[index], locBufferDirection[index], locBufferOffset[index], locbufferDistance[index], locBufferType[index]);
+	};
+
+	return fixed;
+}
+
+var maxlat, minlat, maxlon, minlon;
+
+// 初始化轨迹
+function initTrace() {	
+	maxlat = 0;
+	minlat = 180;
+	maxlon = 0;
+	minlon = 180;
+
+	n = locationarray.length;
+	// gps数据  gpsarray.js
+	// console.log("n:"+n);
+	// 时间		纬度	  经度
+	// 1492493680  39.95845047  116.31668264
+	// console.log(locationarray[0]);
+	for (var i = 0; i < n; i++) {
+		// encode_geohash函数在geohash-new.js
+		// 将数据转为geohash编码
+		locBuffer.push(encode_geohash(locationarray[i][2],locationarray[i][1]));
+		locTime.push(locationarray[i][0]);
+
+		// 找到最大纬度
+		if (maxlat < locationarray[i][1]) {
+			maxlat = locationarray[i][1];
+		}
+		// 找到最小纬度
+		if (minlat > locationarray[i][1]) {
+			minlat = locationarray[i][1];
+		}
+		// 找到最大经度
+		if (maxlon < locationarray[i][2]) {
+			maxlon = locationarray[i][2];
+		}
+		// 找到最小经度
+		if (minlon > locationarray[i][2]) {
+			minlon = locationarray[i][2];
+		}						
+		//console.log(locBuffer[i]);
+		//console.log(locTime[i]);
+	}
+	//116.32932399 116.31556457 40.00011439 39.955846
+	console.log(maxlat, minlat, maxlon, minlon);
+	// 初始化计算次数
+	nowCalc = 0;
+}
+
+// 初始化地图
+function initMap() {
+	var tempsum = 0;
+	// initalways 代表的应该是 waysall.js
+	roadNum = initialways.length;
+	for (var i = 0; i < roadNum; i++) {
+		var flag = 0;
+		// 将路线经纬度切分出来
+		var pathString = initialways[i].path.substring(1,initialways[i].path.length-1);;
+		// 道路转为两个点
+		var pointArray = pathString.split(",");
+		
+		var nowRoad = {};
+		nowRoad.gid = initialways[i].gid;
+		nowRoad.name = initialways[i].name;
+		nowRoad.start = encode_geohash(initialways[i].x1,initialways[i].y1);
+		nowRoad.end = encode_geohash(initialways[i].x2,initialways[i].y2);
+		nowRoad.oneway = initialways[i].one_way;
+		nowRoad.source = initialways[i].source;
+		nowRoad.target = initialways[i].target;
+		path = [];
+		//console.log(pointArray);
+		for (var j = 0; j < pointArray.length; j = j + 1) {
+			var point = pointArray[j].split(" ");
+			path.push(encode_geohash(parseFloat(point[0]), parseFloat(point[1])));
+			// 去除掉越界的点
+			if ((point[0] <= maxlon) && (point[0] >= minlon) && 
+				(point[1] <= maxlat) && (point[1] >= minlat) &&
+				(flag == 0)) {
+				tempsum = tempsum + 1;
+				flag = 1;
+			}
+		}
+		nowRoad.path = path;
+		// 在范围内，则道路个数+1
+		if (flag == 1) {
+			roadsBuffer.push(nowRoad);
+			bufferNum++;
+		}
+		//console.log(nowRoad);
+		//break;
+	}
+	//console.log(tempsum);
+	console.log(roadsBuffer.length);
+}
+
+// 上传数据到合约
+function upload(index) {
+	var latOri = getLatBase32(locBuffer[index]);
+	var lonOri = getLonBase32(locBuffer[index]);
+	var latFix = getLatBase32(locBufferFix[index]);
+	var lonFix = getLonBase32(locBufferFix[index]);
+	trafficContract.methods.setSinglePos(userId, locTime[index], latOri, lonOri, latFix, lonFix).send({from: trafficContractAccount, gas: 500000});
+}
+
+// 异步函数  获取合约信誉值
+async function getQuality() {
+	var nowQua;
+	await trafficContract.methods.getQuality(userId).call(function(error, result){
+		if(!error) {
+			nowQua = result;
+            $("#value").html('信誉:' + nowQua);
+			console.log(nowCalc, nowQua);
+        	} else
+		console.error(error);
+	});
+}
+
+// 异步函数  测试10次数据
+async function testMatch() {
+	for (let i = 0; i < 10; i++) {
+		await calcNext();
+	}
+}
+
+// 异步函数  测试200次数据
+async function matchAll() {
+	for (var i = 0; i < 200; i++) {
+		await calcNext();
+	}
+}
+
+async function calcNext() {
+	var geohash = locBuffer[nowCalc];
+	var point = L.polyline([geohash,geohash],{color:'#FF0000',fillColor:'#FF0000',fillOpacity:1});
+	map.addLayer(point);
+	console.log(point);
+	// console.log('calcNext()', nowCalc, midLat, midLon);
+	//point.addTo(map);
+
+	match(nowCalc);
+	//console.log("test", locBufferFix[nowCalc]);
+	// 修正后的点
+	var newgeohash = locBufferFix[nowCalc];	
+	var point = L.polyline([newgeohash,newgeohash],{color:'#00FF00',fillColor:'#00FF00',fillOpacity:1});
+	map.addLayer(point);
+	// 上传数据至智能合约
+	upload(nowCalc);
+
+	//  信誉估算
+	if (getDistanceByGeohash(locBufferFix[nowCalc], locBuffer[nowCalc]) < 0.8) {
+		quality++;
+	} 
+	if (nowCalc % 20 == 19) {
+		quality++;
+	}
+	if (quality > 100) {
+		quality = 100;
+	}
+	await getQuality();
+	//console.log(nowCalc, quality);//“结果整理2”的html中输出的两个数
+	nowCalc = nowCalc + 1;
+	
+}
+
+function sleep(delay) {
+    var start = new Date().getTime();
+    while (new Date().getTime() < start + delay);
+}
+
+</script>
+</head>
+<body>
+
+<button id="initMap">initMap</button>
+<button id="initTrace">initTrace</button>
+
+<button id="initContract">initContract</button>
+
+<button id="testMatch">testMatch</button>
+<button id="matchAll">matchAll</button>
+<button id="calcNext">calcNext</button>
+<button id="getQuality">getQuality</button>
+
+<h2 id="value"></h2>
+
+<!-- <div id="mapDiv" style="width:1600px; height:1000px"></div> -->
+
+<script>
+	$("#initMap").click(function(){
+		initMap();
+	});
+	$("#initTrace").click(function(){
+		initTrace();
+	});
+	$("#initContract").click(function() {
+		initContract();
+	});
+	$("#calcNext").click(function() {
+		calcNext();
+	});
+	$("#testMatch").click(function() {
+		testMatch();
+	});	
+	$("#matchAll").click(function() {
+		matchAll();
+	});	
+	$("#getQuality").click(function() {
+		getQuality();
+	});		
+
+	//调用地图
+	// initLeaflet();
+	// function initLeaflet() {
+	// 	map = L.map("mapDiv").setView([39.95844857,116.31668809],13);
+	// 	L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{attribution:'&copy; <a 	href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'}).addTo(map);	
+	// }	
+</script>
+<div id="map"></div>	
+	<script>
+		// setView设置地图放缩大小和中心点
+		var map = L.map('map',{maxZoom:18,minZoom:1}).setView("wx4er1",13);
+	</script>
+
+	<script src="water.js"></script>	
+	<script src="ways.js"></script>
+	<script src="landcover.js"></script>	
+	<script src="railway.js"></script>	
+	<script>
+		function styleSheet() {
+			this.color			=undefined;
+			this.fillColor		=undefined;
+			this.weight			=undefined;
+			this.dashArray		=undefined;
+			this.lineCap		='round';
+			this.lineJoin		='round';
+			this.line_clip		=false;
+			this.opacity		=1;
+			this.fillOpacity	=0;
+		}
+		//样式表原型
+		function mystyle(feature){
+			var zoom = map.getZoom();
+			var style=new styleSheet();
+			var style=waterCss(feature.properties,zoom,style);
+			var style=waysCss(feature.properties,zoom,style);
+			var style=landcoverCss(feature.properties,zoom,style);
+			var style=railwayCss(feature.properties,zoom,style);
+			if(style.fillColor!==undefined)
+			{
+				style.fillOpacity=1;
+			}
+			return style;
+		};
+			
+		var iconArray=[];
+		var iconcount=0;
+		var labelArray=[];
+		var labelcount=0;
+		
+		var singlelabelArray=[];
+		var singlelabelcount=0;
+		//标记图标和文字标签对象以便处理
+		//标签显示位置未做geohash修改
+		function myoneach(feature,layer){
+			if(map.getZoom()<feature.properties.minzoom)
+			{
+				return;
+			}
+			//为室内对象绑定图标
+			else if(map.getZoom()===13){
+				if(((feature.geometry.type==='LineString'&&!feature.properties.room&&!feature.properties.building&&!feature.properties.level&&feature.properties.name)
+				&&(feature.properties.highway==='primary'||feature.properties.highway==='motorway'))){
+					var label = new L.Label();
+					for(x in labelArray)
+					{
+						if(feature.properties.name===labelArray[x]._content)
+						{
+							return;
+						}
+					}
+					labelArray[labelcount]=label;
+					labelcount++;
+					label.setContent(feature.properties.name);					
+					//道路方向
+					var i=0,j=0;
+					var tlat=0,tlng=0;
+					
+					i = layer._latlngs[layer._latlngs.length-1].lat -layer._latlngs[0].lat;
+					j = layer._latlngs[layer._latlngs.length-1].lng -layer._latlngs[0].lng;
+					
+					if(i > j)
+					{
+							tlat=12;
+					}
+					else
+					{
+							tlng=12;
+					}
+					//单字符显示道路名字
+					var str = feature.properties.name;
+					var couts = layer._latlngs.length;
+					
+					for(var i=0;i < str.length;i++)
+					{
+						var tmplabel = new L.Label();
+						singlelabelArray[singlelabelcount]=tmplabel;
+						singlelabelcount++;
+						tmplabel.setContent(str.substr(i,1));
+
+					    var t=map.project(layer.getBounds().getCenter());
+					 	t.x=t.x+tlat*(i-1);
+					 	t.y=t.y+tlng*(i-1);
+					 	var t1=map.unproject(t);
+						tmplabel.setLatLng(t1);
+						map.showLabel(tmplabel);	
+					}
+				}
+			}
+			else if(map.getZoom()===14){
+						if(((feature.geometry.type==='LineString'&&!feature.properties.room&&!feature.properties.building&&!feature.properties.level&&feature.properties.name)
+						&&(feature.properties.highway==='primary'||feature.properties.highway==='secondary'||feature.properties.highway==='trunk'))){
+					var label = new L.Label();
+					for(x in labelArray)
+					{
+						if(feature.properties.name ===labelArray[x]._content)
+						{
+							return;
+						}
+					}
+					labelArray[labelcount]=label;
+					labelcount++;
+					label.setContent(feature.properties.name);
+					//道路方向
+					var i=0,j=0;
+					var tlat=0,tlng=0;
+					
+					i = layer._latlngs[layer._latlngs.length-1].lat -layer._latlngs[0].lat;
+					j = layer._latlngs[layer._latlngs.length-1].lng -layer._latlngs[0].lng;
+					
+					if(i > j)
+					{
+							tlat=12;
+					}
+					else
+					{
+							tlng=12;
+					}
+					//zc,单字符显示道路名字
+					var str = feature.properties.name;
+					var couts = layer._latlngs.length;
+					
+					for(var i=0;i < str.length;i++)
+					{
+						var tmplabel = new L.Label();
+						singlelabelArray[singlelabelcount]=tmplabel;
+						singlelabelcount++;
+						tmplabel.setContent(str.substr(i,1));
+
+					  var t=map.project(layer.getBounds().getCenter());
+					 	t.x=t.x+tlat*(i-1);
+					 	t.y=t.y+tlng*(i-1);
+					 	var t1=map.unproject(t);
+						tmplabel.setLatLng(t1);
+						map.showLabel(tmplabel);	
+					}
+				}
+			}
+												
+			else if(map.getZoom()>=15){
+				if(feature.geometry.type==='LineString'&&!feature.properties.room&&!feature.properties.building&&!feature.properties.level&&feature.properties.name)
+				{
+					
+					var label = new L.Label();
+					for(x in labelArray)
+					{
+						if(feature.properties.name ===labelArray[x]._content)
+						{
+							return;
+						}
+					}
+					labelArray[labelcount]=label;
+					labelcount++;
+					label.setContent(feature.properties.name);		
+					
+					//道路方向
+						var i=0,j=0;
+						var tlat=0,tlng=0;
+					 	
+					 	i = layer._latlngs[layer._latlngs.length-1].lat -layer._latlngs[0].lat;
+					 	j = layer._latlngs[layer._latlngs.length-1].lng -layer._latlngs[0].lng;
+					 	
+					 	if(i > j)
+					 	{
+					 			tlat=12;
+					 	}
+					 	else
+					 		{
+					 				tlng=12;
+					 		}
+					//单字符显示道路名字
+					var str = feature.properties.name;
+					var couts = layer._latlngs.length;
+					
+					for(var i=0;i < str.length;i++)
+					{
+						var tmplabel = new L.Label();
+						singlelabelArray[singlelabelcount]=tmplabel;
+						singlelabelcount++;
+						tmplabel.setContent(str.substr(i,1));
+
+					  var t=map.project(layer.getBounds().getCenter());
+					 	t.x=t.x+tlat*(i-1);
+					 	t.y=t.y+tlng*(i-1);
+					 	var t1=map.unproject(t);
+						tmplabel.setLatLng(t1);
+						map.showLabel(tmplabel);	
+					}
+				}
+			}
+			//在缩放15级以上添加文字标签
+		};
+
+		function myLowfilter(feature,layer){
+			if(map.getZoom()<feature.properties.minzoom)
+			{
+				return false;
+			}
+			if(map.getZoom()>18){
+				if(feature.properties.room==='building')
+				{
+					return true;
+				}
+				else
+				{
+					return false;
+				}
+			}
+			else{
+				if(feature.geometry.type==='Point'||feature.properties.level||feature.properties.building||feature.properties.natural==='water'||feature.properties.railway){
+					return false;
+				}
+				else{
+					if(feature.geometry.type==='Polygon'||feature.geometry.type==='MultiPolygon')
+					return true;
+				}
+			}
+		};
+		function myHighfilter(feature,layer){
+			if(map.getZoom()<feature.properties.minzoom)
+			{
+				return false;
+			}
+			if(map.getZoom()>18){
+				if(feature.properties.level&&feature.properties.room&&feature.properties.room!=='building'&&feature.geometry.type!=='Point'){
+					return true;
+				}
+				else{
+					return false;
+				}
+			}
+			else{
+				if(feature.geometry.type==='Point'||feature.properties.level||feature.properties.building){
+					return false;
+				}
+				else{
+					if(feature.geometry.type!=='Polygon'||feature.properties.natural==='water'||feature.properties.railway)
+					return true;
+				}
+			}
+		};
+		
+
+		// var URL = window.location.href;		
+		//geoserver上提供geohashjson的地址，根据geohash值即可得到
+		// var GeohashURL = URL + 'geoserver/h/{z}/{h}';
+		// 实际上此时的GeoHashURL就没有用上，用的还是静态数据
+		// console.log("GeohashURL:",GeohashURL);
+		// console.log("显示底层图形");
+		var GeohashURL =null;
+		var GeohashlowLayer = new L.GeohashLayer.GeoJSON(GeohashURL,{maxZoom:18,minZoom:1},
+		{
+			style:mystyle,
+			onEachFeature:myoneach,
+			filter:myLowfilter
+		})
+		map.addLayer(GeohashlowLayer);
+		// console.log("底层图形已显示");
+
+		// console.log("显示高层图形");
+		var GeohashhighLayer = new L.GeohashLayer.GeoJSON(GeohashURL,{maxZoom:18,minZoom:1},
+		{
+			style:mystyle,
+			onEachFeature:myoneach,
+			filter:myHighfilter
+		})
+		map.addLayer(GeohashhighLayer);
+		// console.log("高层图形已显示");
+		
+		// var tmp_geojson =  ["wx4eqcet93y","wx4eqcet93y"];
+		// var line =  L.polyline(tmp_geojson, {color:'#FF0000',fillColor:'#FF0000',fillOpacity:1});
+		// console.log(line);
+		// map.addLayer(line);
+		// GeohashhighLayer.setZIndex(4);
+		// GeohashlowLayer.setZIndex(3);		
+	</script>
+</body>
+</html>

@@ -1,0 +1,637 @@
+<html><head><meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<script type="text/javascript" src="./traffic_files/jquery-3.2.1.min.js"></script>
+<script type="text/javascript" src="./traffic_files/web3.js"></script>
+<script type="text/javascript" src="./traffic_files/truffle-contract.js"></script>
+<script type="text/javascript" src="./traffic_files/geohash.js"></script>
+<script type="text/javascript" src="./traffic_files/StoreMap.json"></script>
+<script type="text/javascript" src="./traffic_files/common.js"></script>
+<script type="text/javascript" src="./traffic_files/GPS.js"></script>
+<script type="text/javascript" src="./traffic_files/StoreTraffic.json"></script>
+<script src="http://api.map.baidu.com/api?v=2.0&ak=DDd05fcba9fea5b83bf648515e04fc4c" type="text/javascript"></script>
+<script type="text/javascript" src="http://developer.baidu.com/map/jsdemo/demo/convertor.js"></script>
+
+</head>
+<body>
+	<form>
+	geohash:
+	<input type='text' name='hash' id='geohash'/>
+	<input type="button" style="width: 120px; height: 30px" value="get roads" onclick="get_roads(document.getElementById('geohash').value)">  
+	<hr>
+	tile info:  x:
+	<input type='text' name='tile_x' id='tile_x'/>
+	y: <input type='text' name='tile_y' id='tile_y'/>
+	z: <input type='text' name='tile_z' id='tile_z'/>
+	<input type="button" style="width: 120px; height: 30px" value="get roads" onclick="get_map_by_tile(document.getElementById('tile_x').value,
+		document.getElementById('tile_y').value, document.getElementById('tile_z').value)">  
+	</form>
+	<form>
+    	<input type="button" id="online_test" onclick="test_online();" value="开始路况探测"/>
+    </form>
+	<form>
+    	<input type="button" id="offline_test" onclick="test_offline();" value="开始数据测试"/>
+    </form>
+	<TEXTAREA id='info' ROWS="10" COLS="60" readOnly="true"></TEXTAREA><br/>
+	<div id="mapDiv" style="width:800px; height:600px">
+	</div>
+	<script type="text/javascript">
+
+//web3 api
+var web3 = new Web3();
+//web3.setProvider(new web3.providers.HttpProvider("http://localhost:8545"));
+var MyContract = TruffleContract(contract_json);
+// Step 3: Provision the contract with a web3 provider
+// MyContract.setProvider(new Web3.providers.HttpProvider("http://os.cs.tsinghua.edu.cn:11086"));//8545
+MyContract.setProvider(new Web3.providers.HttpProvider("http://localhost:8545"));//8545
+var contract_addr = "0x105E6A398FD666Ec98818B62ADff74ff522Fe4E2"
+var myContractInstance = MyContract.at(contract_addr);
+
+//map
+var roads_buffer = [];//buffer roads in geohash block
+var geohash_idx = {};//map from hash to index in roads_buffer
+var buffer_pos = 0;
+var buffer_size = 50;
+
+//matching
+var matching_window = new Array();
+var matching_window2 = new Array();//for test
+var window_bound = 10;//submit traffic conditions every 10s
+var range = 70;//meters
+var jam_speed = 2.0;
+var max_speed = 33;
+
+
+//gps
+var watchID;
+var geoLoc;
+
+if(!window.localStorage){
+	alert('This browser does NOT support localStorage');
+}
+var storage = window.localStorage;
+var user_id;
+if (!storage.getItem("uuid")){
+	user_id = generateUUID();
+	storage.setItem("uuid",user_id);
+}
+else{
+	user_id = storage.getItem("uuid");
+}
+//alert(user_id);
+
+var lock = false;
+
+//test
+var counter = 0;
+var cur_gid = -1;
+var cur_road;
+var pre_point;
+var pre_utc = -1;
+var rest_number = 0;// number of the rest points in the window
+var traffics = [];
+//test_offline();
+
+// 调用百度地图
+init_map();
+
+function init_map(){
+	map = new BMap.Map("mapDiv");//mapDiv为放地图的 div 的 id
+
+	map.addControl(new BMap.NavigationControl());
+
+	map.addControl(new BMap.ScaleControl());
+
+	map.addControl(new BMap.OverviewMapControl());
+	
+	var BMap_point = new BMap.Point(116.32937, 39.96553);
+	
+	map.centerAndZoom(BMap_point, 18);//point为坐标点，15为地图缩放级别，最大级别是 18
+	
+	window.map = map;
+	
+	document.getElementById('info').defaultValue="路况信息：\n";
+
+}
+
+var counter = 0;
+function test_add_gps(){
+	if(!lock){
+		add_gps(matching_window2[counter]);
+		counter++;
+	}
+}
+function test_offline(){
+	//var url = "http://10.108.21.225:80/GPS";
+	var url = "http://os.cs.tsinghua.edu.cn/GeoServer/vectormap/traffic/GPS";
+	var htmlobj= $.ajax({url:url,async:false});  
+	var data = htmlobj.responseText;
+
+	read_trajectory(data, matching_window);
+	alert(matching_window.length);
+	match(matching_window).then(function(){
+		alert("match complete!");
+		var info;
+		for(var i=0; i<matching_window.length; i++){
+			//printObj(matching_window[i]);
+			//match failed
+			if(typeof(matching_window[i].gid) == "undefined"){
+				//continue;
+			}
+			info = matching_window[i].utc+";"+matching_window[i].gid + "," + matching_window[i].lat + "," + matching_window[i].lon;
+
+			post_info("storeGPS.php", info);
+		}
+		traffic_estimation();
+		alert("done");
+
+	});
+}
+
+//map function
+function get_roads(geo_hash){
+	// console.log("get_roads");
+	//clear buffer if full
+	if(roads_buffer.length > buffer_size){
+		buffer_pos = 0;
+	}
+
+	if(geo_hash in geohash_idx){
+		return Promise.resolve(roads_buffer[geohash_idx[geo_hash]]);
+	}
+
+	//not in buffer, get roads from block chain
+	var roads_array = new Array();
+	return myContractInstance.get_roads(geo_hash).then(function(roads){
+  		var road_info = roads[0];
+		//alert(road_info.length);
+		var road_name = roads[1];
+		var road_path = roads[2];
+		//alert(road_path);
+		var pos = 0;//record pointer to read path
+
+		for(var i=0; i<road_name.length; i++){
+			var road = new Object();
+			road.gid = road_info[i*8].valueOf();
+			
+			road.x1  = road_info[i*8 + 1] / 100000;
+			road.y1  = road_info[i*8 + 2] / 100000;
+			road.x2  = road_info[i*8 + 3] / 100000;
+			road.y2  = road_info[i*8 + 4] / 100000;
+			road.source = road_info[i*8 + 5].valueOf();
+			road.target = road_info[i*8 + 6].valueOf();
+			road.oneway  = road_info[i*8 + 7].valueOf();
+			road.name = hex2str(road_name[i]);
+			
+			road.path = new Array();
+			road.path.push(road.x1);
+			road.path.push(road.y1);
+
+			//read path
+			var path_num = road_path[pos++];
+			for(var j=0; j< path_num; j++){
+				road.path.push(road_path[pos++] / 100000);
+			}
+			road.path.push(road.x2);
+			road.path.push(road.y2);
+
+			roads_array.push(road);
+			//alert(typeof(road.gid));
+		}
+		//buffer
+		roads_buffer[buffer_pos] = roads_array;
+		//alert(geohash);
+		geohash_idx[geo_hash] = buffer_pos;
+		buffer_pos++;
+		console.log(roads_array);
+		return roads_array;
+	});
+	
+}
+
+//query road from buffer
+function get_road_by_gid(gid){
+	var roads_array;
+	for(var i=0; i< buffer_pos; i++){
+		roads_array = roads_buffer[i];
+		for(var j=0; j< roads_array.length; j++){
+			if(roads_array[j].gid == gid){
+				return roads_array[j];
+			}
+		}
+	}
+}
+
+	function get_map_by_tile(tile_x, tile_y, tile_z){
+		tile_x = parseInt(tile_x);
+		tile_y = parseInt(tile_y);
+		tile_z = parseInt(tile_z);
+		var hash_array = get_geohash_by_tile(tile_x, tile_y, tile_z);
+		alert(hash_array);
+		var roads_array = new Array();
+		//var area_roads = new Array();
+		var bound = {};
+		var x1 = tile2long(tile_x,tile_z);
+		var x2 = tile2long(tile_x+1,tile_z);
+		var y1 = tile2lat(tile_y,tile_z);
+		var y2 = tile2lat(tile_y+1,tile_z);
+	
+		bound.min_x = Math.min(x1, x2);
+		bound.max_x = Math.max(x1, x2);
+		bound.min_y = Math.min(y1, y2);
+		bound.max_y = Math.max(y1, y2);
+
+		//alert("" + bound.min_x + " " + bound.min_y + " " + bound.max_x+ " " + bound.max_y);
+		
+		//var gid_array = new Array();
+		var ps = [];
+		for(var i=0; i< hash_array.length; i++){
+			ps.push(get_roads(hash_array[i]).then(function(area_roads){
+
+				//alert(area_roads.length);
+				for(var j=0; j<area_roads.length; j++){
+					var road = area_roads[j];
+					
+					if(has_intersection_linestring(road.path, bound)){
+						roads_array.push(road);
+					}
+				}
+			})
+			);
+		}
+
+		return Promise.all(ps).then(function(){
+			roads_array = remove_duplicate_road(roads_array);
+			alert(roads_array.length);
+			return roads_array;
+		});
+	}
+	
+	//gps function
+	function showLocation(position) {
+		var point = {};
+		point.time = Math.round(position.timestamp / 1000);
+	    point.lat = position.coords.latitude;
+		point.lon = position.coords.longitude;
+        point.speed = position.coords.speed;
+		matching_window.push(point);
+				
+		if(matching_window.length > window_bound){
+			match(matching_window);
+		}
+
+	    var accuracy = position.coords.accuracy;
+	    var info = user_id + ":" + point.time + "; Latitude : " + point.lat + " Longitude: " 
+			+ point.lon + " accuracy: " + accuracy + " speed: " + point.speed;
+        //alert(info);
+	}
+         
+	function errorHandler(err) {
+		if(err.code == 1) {
+			alert("Error: Access is denied!");
+		}
+            
+		else if( err.code == 2) {
+			alert("Error: Position is unavailable!");
+		}
+	}
+         
+	function getLocationUpdate(){
+		if(navigator.geolocation){
+			// timeout at 60000 milliseconds (60 seconds)
+			var options = {enableHighAccuracy : true, maximumAge : 10000, timeout:60000};
+			geoLoc = navigator.geolocation;
+			watchID = geoLoc.watchPosition(showLocation, errorHandler, options);
+		}
+            
+		else{
+			alert("Sorry, browser does not support geolocation!");
+		}
+	}
+
+function match(queue){
+	var candidates;
+	var ps = [];
+	var matched = [];
+
+	return queue.reduce(function(seq, point){
+		return seq.then(function(){
+			return get_candidates(point).then(function(candidates){		
+				if(candidates.length > 0){
+					var road = get_best_match(point, candidates);
+					//match success
+					if(typeof(road) != "undefined"){
+						cur_road = road;
+						cur_gid = road.gid;
+						point.gid = road.gid;
+						project_linestring(point, road.path);
+						if(typeof(pre_point) != "undefined"){
+							if(point.gid != pre_point.gid && point.type == 1){
+								point.direction = 1;
+							}
+							else if(point.gid != pre_point.gid && point.type == 2){
+								point.direction = 0;
+							}
+							else if(point.offset > pre_point.offset){
+								point.direction = 1;
+							}
+							else if(point.offset < pre_point.offset){
+								point.direction = 0;
+							}
+							else{
+								point.direction = -1;//unknown
+							}
+						}
+						
+						pre_point = point;
+						//printObj(pre_point);
+					}
+					
+					
+				}
+			});
+		});
+	}, Promise.resolve());
+}
+
+function get_candidates(point){
+	//printObj(point);
+	//get 9 geohash blocks
+	var geohash = encode_geohash(point.lon, point.lat);
+	var neighbours = getNeighbour(geohash).concat(geohash);
+
+	//get all roads in blocks and filter
+	var candidates = new Array();
+
+	var ps = [];
+	for(var i=0; i<neighbours.length; i++){
+		ps.push(get_roads(neighbours[i]).then(function(area_roads){
+			for(var j=0; j<area_roads.length; j++){
+				candidates.push(area_roads[j]);
+			}
+		}));
+	}
+
+	return Promise.all(ps).then(function(){
+		//alert(candidates.length);
+		candidates = remove_duplicate_road(candidates);
+		//alert(candidates.length);
+		candidates = filter(candidates, point);
+		//alert(candidates.length);
+		return candidates;
+	});
+
+}
+
+//filter roads in the range
+function filter(roads, point){
+	var candidates = new Array();
+	var road;
+	for(var i=0; i<roads.length; i++){
+		road = roads[i];
+		var distance_info = get_distance_linestring(road.path, point.lon, point.lat);	
+		var distance = distance_info[0];
+		if(distance <= range){
+			//if same road and not near to intersection, increase prop
+			if(road.gid == cur_gid){
+				if(pre_point.direction == -1 || pre_point.direction == 1 && pre_point.type == 2 || pre_point.direction == 0 && pre_point.type == 1){
+					road.prop = range / (distance * 0.3 + 0.1);
+				}
+				else{
+					road.prop = range / (distance + 0.1);
+				}
+				
+			}
+			else{
+				road.prop = range / (distance + 0.1);
+			}
+			candidates.push(road);
+		}
+	}
+	return candidates;
+}
+
+
+function get_best_match(point, candidates){
+	var road;
+	var candidate_idx =-1;//max prop and not reverse
+
+	candidates.sort(compare_candidate);
+
+	if(cur_gid == -1){
+		return candidates[0];
+	}
+	
+	for(var i=0; i<candidates.length; i++){
+		road = candidates[i];
+		//if road is oneway, ensure same direction
+		if(road.oneway == 1){
+			var tmp_point = {};
+			tmp_point.lat = point.lat;
+			tmp_point.lon = point.lon;
+			project_linestring(tmp_point, road.path);
+			//reverse
+			if(road.gid == cur_gid && pre_point.distance - tmp_point.distance > 1){
+				continue;
+			}
+		}
+		
+		if(candidate_idx == -1){
+			candidate_idx = i;
+		}
+		//joint 
+		if(is_route(road, cur_road)){
+			//var tmp_point = {};
+			//tmp_point.lat = point.lat;
+			//tmp_point.lon = point.lon;
+			//project_linestring(tmp_point, road.path);
+			//if(road.gid == cur_road.gid){
+			//	return road;
+			//}
+			//else if(tmp_point.type == 2 && road.oneway == 1 || road.oneway == 0 && tmp_point.type != 1){
+				//alert("here1");
+				return road;
+			//}
+			
+		}	
+	}
+	//avoid previous point is matched wrong
+	return candidates[candidate_idx];
+
+}
+
+var pre_gid = -1;
+var acc_switching_delay = 0;
+
+function traffic_estimation(){
+	alert("traffic estimation start! point number: " + matching_window.length);
+	var point;
+	var counter = 0;
+	if(pre_gid == -1){
+		pre_gid = matching_window[0].gid;
+	}
+	//split by gid
+	var start = 0;
+	var end = 0;
+	for(var i=0; i<matching_window.length; i++){
+		point = matching_window[i];
+		end = i;
+		if(point.gid != pre_gid && i != matching_window.length-1){
+			//remove wrongly matching point
+			if(matching_window[i+1].gid != point.gid){
+				counter++;
+				continue;
+			}
+			estimate_switching_delay(start, end);
+			acc_switching_delay = 0;
+			start = end;
+			pre_gid = point.gid;
+			counter = 0;
+		}
+		else if(counter > window_bound){
+			estimate_road(start, end);
+			start = end;
+			counter = 0;
+		}
+		counter++;
+	}
+	//remove points have been processed.
+}
+
+//the sequence is roadA,roadA......roadA,roadB, submit switching delay.
+function estimate_switching_delay(start, end){
+	if(end <= start){
+		return;
+	}
+	//alert("intersection: " + start + ";" + end);
+	//data cleaning, if there is a route between road A and B.
+	//get road info
+	var gid_A = matching_window[start].gid;
+	var road_A = get_road_by_gid(gid_A);
+	if(typeof(road_A) == "undefined"){
+		alert("road info missing, gid: " + gid_A);
+	}
+	var gid_B = matching_window[end].gid;
+	var road_B = get_road_by_gid(gid_B);
+	if(typeof(road_B) == "undefined"){
+		alert("road info missing, gid: " + gid_B);
+	}
+
+	//abnormal data
+	if(!is_route(road_A, road_B)){
+		return;
+	}
+	
+	//calulate switching delay.
+	var position = start + 1;
+	for(var i= start + 1; i<=end; i++){
+		if(Math.abs(matching_window[i].distance - matching_window[i-1].distance) < jam_speed){// speed < 1m/s -> have entered the intersection
+			break;
+		}
+		position = i;
+	}
+	estimate_road(start, position-1);
+	var delay = matching_window[end].utc - matching_window[position].utc + acc_switching_delay;
+
+	//write switching delay.
+	var info = "switching delay (" + gid_A + "," + gid_B + "): ";
+	info += delay + "s";
+	post_info("storeTraffic.php", info);
+}
+
+//the sequence is roadA.....roadA, submit road speed, and alarm if traffic jam happens. if traffic jam occur near to intersection, time would be added to switching delay.
+function estimate_road(start, end){
+	if(end <= start){
+		return;
+	}
+	//alert("road: " + start + ";" + end);
+	var dist = Math.abs(matching_window[end].distance - matching_window[start].distance);
+	var interval = matching_window[end].utc - matching_window[start].utc;
+	var speed = dist / interval;
+	
+	//low speed and near the intersection, then add the interval to next switching delay
+	if(speed < jam_speed && (matching_window[end].type == 2 && matching_window[end].direction == 1 
+		|| matching_window[end].type == 1 && matching_window[end].direction == 0)){
+		acc_switching_delay += matching_window[end].utc - matching_window[start].utc;
+	}
+
+	else{//write speed and alarm if traffic jam happens
+		var info = "gid: " + matching_window[start].gid + "; speed: " + speed;
+		post_info("storeTraffic.php", info);
+		add_estimate_traffic(matching_window[start].gid,speed,150000,0);
+		if(speed < jam_speed){
+			info = "traffic jam in road " + matching_window[start].gid;
+			post_info("storeTraffic.php", info);
+		}
+	}
+}
+
+function post_info(script_name, info){
+	var xmlhttp;
+	if (window.XMLHttpRequest)
+	{// code for IE7+, Firefox, Chrome, Opera, Safari
+		xmlhttp=new XMLHttpRequest();
+	}
+	else
+	{// code for IE6, IE5
+		xmlhttp=new ActiveXObject("Microsoft.XMLHTTP");
+	}
+	xmlhttp.open("POST",script_name,true);
+	xmlhttp.setRequestHeader("Content-type","application/x-www-form-urlencoded");
+	//alert(info);
+	xmlhttp.send("info=" + info);
+	sleep(200);
+}
+
+//---StoreTraffic---------------------------------------------------------------------
+var TrafficContract = TruffleContract(traffic_contract_json);
+// TrafficContract.setProvider(new Web3.providers.HttpProvider("http://os.cs.tsinghua.edu.cn:11086"));//8545
+TrafficContract.setProvider(new Web3.providers.HttpProvider("http://localhost:8545"));//8545
+var StoreTraffic_contract_addr = "0x58ef76141659b5792378cE45C037376d1017313E"
+// account 0xCF0AFA44531233966dFa8ef6198F3b7C13b4DA71
+var StoreTrafficInstance = TrafficContract.at(StoreTraffic_contract_addr);
+var seq = -1;
+var date = "";
+var datetmp;
+var ty;
+var tm;
+var td
+var account = "0xF0aA83a6011Cb982008012d113F2c60964a8fae0";
+
+test_offline();
+	
+function add_estimate_traffic(road_id,speed,gas,retry_times){
+		if(retry_times > 10){
+		console.log("add estimate traffic failed. road_id: " + road_id);
+		return;
+	}
+	seq = get_cur_seq();//时间段
+	datetmp = new Date();
+	ty = datetmp.getFullYear();
+	tm = datetmp.getMonth()+1;
+	td = datetmp.getDate();
+	 if (tm >= 1 && tm <= 9) {
+	        tm = "0" + tm;
+	    }
+	 if (td >= 0 && td <= 9) {
+	        td = "0" + td;
+	    }
+	date = ty+tm+td;//日期格式为yyyymmdd
+	date = parseInt(date);
+	road_id = parseInt(road_id);
+	
+	speed = speed * 1000;
+	
+	StoreTrafficInstance.add_traffic(road_id, speed, seq, date, {from: account,gas: gas}).then(function(result) {
+		console.log(result);
+		info = road_id +","+ speed+","+ seq + "," + date;
+		post_info("storeTrafficBlockchain.php", info);
+	},
+	function(err){
+		//retry
+		add_estimate_traffic(road_id, speed, gas, retry_times+1);
+	});
+}
+//------------------------------------------------------------------------------------	
+</script>
+
+
+</body></html>
