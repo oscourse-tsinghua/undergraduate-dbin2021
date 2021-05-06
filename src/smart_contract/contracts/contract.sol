@@ -93,7 +93,7 @@ contract Contract{
         */
     }
     
-    function getQuality(string memory uuid) public view returns (int) {
+    function getQuality(string memory uuid) view public  returns (int) {
         if (!users[uuid].isUsed) {
             return 0;
         }

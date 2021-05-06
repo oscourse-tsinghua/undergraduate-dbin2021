@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+<!-- <!DOCTYPE html> -->
 <html lang="en" xmlns="http://www.w3.org/1999/xhtml">
 <head>
     <title>Traffic</title>
@@ -35,151 +35,38 @@
 	<script src="./gpsarray.js"></script>
 	<script src="./waysall.js"></script>
 
-
+	<script type="text/javascript" src="./StoreMap.js"></script>
+	<script type="text/javascript" src="./TrafficContract.js"></script>
 <script type="text/javascript">
 
 //Map contract
-var mapContractAccount = ''; 
-var mapContractAbi = [];
-var mapContractAddress = '';
-var mapContractServer = '';
+var mapContractAccount = '0xBE137F3ed837899375B7dC688a364CD88Df3C2C2'; 
+var mapContractAddress = '0x0Db3B6a70D46f134e71E9888157d70c4C89a38b6';
+// var mapContractServer = 'http://172.18.0.50:8545/';
+var mapContractServer = 'http://127.0.0.1:8545/';
 var mapContract;
+var web3Map;
 
 //Traffic contract
-var trafficContractAbi = [{
-      "constant": false,
-      "inputs": [
-        {
-          "internalType": "string",
-          "name": "uuid",
-          "type": "string"
-        }
-      ],
-      "name": "revalue",
-      "outputs": [],
-      "payable": false,
-      "stateMutability": "nonpayable",
-      "type": "function"
-    },
-    {
-      "constant": true,
-      "inputs": [
-        {
-          "internalType": "string",
-          "name": "uuid",
-          "type": "string"
-        }
-      ],
-      "name": "getQuality",
-      "outputs": [
-        {
-          "internalType": "int256",
-          "name": "",
-          "type": "int256"
-        }
-      ],
-      "payable": false,
-      "stateMutability": "view",
-      "type": "function"
-    },
-    {
-      "constant": true,
-      "inputs": [
-        {
-          "internalType": "string",
-          "name": "uuid",
-          "type": "string"
-        }
-      ],
-      "name": "getSinglePos",
-      "outputs": [
-        {
-          "internalType": "uint256",
-          "name": "",
-          "type": "uint256"
-        },
-        {
-          "internalType": "uint256",
-          "name": "",
-          "type": "uint256"
-        },
-        {
-          "internalType": "uint256",
-          "name": "",
-          "type": "uint256"
-        },
-        {
-          "internalType": "uint256",
-          "name": "",
-          "type": "uint256"
-        },
-        {
-          "internalType": "uint256",
-          "name": "",
-          "type": "uint256"
-        }
-      ],
-      "payable": false,
-      "stateMutability": "view",
-      "type": "function"
-    },
-    {
-      "constant": false,
-      "inputs": [
-        {
-          "internalType": "string",
-          "name": "uuid",
-          "type": "string"
-        },
-        {
-          "internalType": "uint256",
-          "name": "time",
-          "type": "uint256"
-        },
-        {
-          "internalType": "uint256",
-          "name": "_latOri",
-          "type": "uint256"
-        },
-        {
-          "internalType": "uint256",
-          "name": "_lonOri",
-          "type": "uint256"
-        },
-        {
-          "internalType": "uint256",
-          "name": "_latFix",
-          "type": "uint256"
-        },
-        {
-          "internalType": "uint256",
-          "name": "_lonFix",
-          "type": "uint256"
-        }
-      ],
-      "name": "setSinglePos",
-      "outputs": [],
-      "payable": false,
-      "stateMutability": "nonpayable",
-      "type": "function"
-    }];
-var trafficContractAccount = '0x6E01DF10C7981D80Cf512D8b1c36aBD276909021'; 
-var trafficContractAddress = '0x00f4dD5b19Ba8272a6eE52e13eAca27689d6Cc3D';
-var trafficContractServer = 'http://localhost:8545';
+var trafficContractAccount = '0xBE137F3ed837899375B7dC688a364CD88Df3C2C2'; 
+var trafficContractAddress = '0xC7384e98732b398F966CD488476dC95Ae50C93Db';
+// var trafficContractServer = 'http://172.18.0.50:8545/';
+var trafficContractServer = 'http://127.0.0.1:8545/';
 var trafficContract;
+var web3Traffic;
 
 //Contract Init
 function initContract() {
-	if (typeof web3 !== 'undefined') {
-	    //var web3Map = new Web3(web3.currentProvider);
-	    var web3Traffic = new Web3(web3.currentProvider);
+    if (typeof web3 !== 'undefined') {
+	    web3Map = new Web3(web3.currentProvider);
+	    web3Traffic = new Web3(web3.currentProvider);
 	} else {
-	    //var web3Map = new Web3(new Web3.providers.HttpProvider(mapContractServer));
-	    var web3Traffic = new Web3(new Web3.providers.HttpProvider(trafficContractServer));
+	    web3Map = new Web3(new Web3.providers.HttpProvider(mapContractServer));
+	    web3Traffic = new Web3(new Web3.providers.HttpProvider(trafficContractServer));
 	}
-	//mapContract = new web3Map.eth.Contract(mapContractAbi,mapContractAddress);
+	mapContract = new web3Map.eth.Contract(mapContractAbi,mapContractAddress);
 	trafficContract = new web3Traffic.eth.Contract(trafficContractAbi,trafficContractAddress);
-	console.log("OK!");
+	console.log("OK!")
 }
 
 //user id
@@ -211,39 +98,81 @@ var map;
 
 // 这个函数目前没有使用
 function getRoads(geohash) {
-	if (geohash in geo2index) {
-		return Promise.resolve(roadsBuffer[geo2index[geohash]]);
+	// console.log("getRoads");
+	// console.log(web3Map.utils.asciiToHex('test'));
+	var roads = new Array();
+	mapContract.methods.get_roads(web3Map.utils.asciiToHex(geohash)).call(function(error,result){
+		if(!error){
+			var roadInfo = result[0];
+			var roadName = result[1];
+			var roadPath = result[2];
+
+			var pointer = 0;
+			for (var i = 0; i < roadName.length; i++){
+				var road = new Object();
+				road.gid = roadInfo[i*8].valueOf();
+				
+				road.x1  = roadInfo[i*8 + 1] / 100000;
+				road.y1  = roadInfo[i*8 + 2] / 100000;
+				road.x2  = roadInfo[i*8 + 3] / 100000;
+				road.y2  = roadInfo[i*8 + 4] / 100000;
+				road.source = roadInfo[i*8 + 5].valueOf();
+				road.target = roadInfo[i*8 + 6].valueOf();
+				road.oneway  = roadInfo[i*8 + 7].valueOf();
+				road.name = hex2str(roadName[i]);
+				
+				road.path = new Array();
+
+				//read path
+				var path_num = parseInt(roadPath[pointer++],16);
+				for(var j=0; j< path_num; j++){
+					var temp = web3Map.utils.hexToAscii(roadPath[pointer++]);
+					road.path.push(temp);
+				}
+				roads.push(road);
+			}
+
+			if (bufferNum == bufferMax) {
+				delete geo2index[roadsGeoBuffer[bufferEnd]];
+				bufferNum--;
+			}
+			roadsGeoBuffer[bufferEnd] = geohash;
+			roadsBuffer[bufferEnd] = roads;
+			geo2index[geohash] = bufferEnd;
+			bufferEnd++;
+			bufferNum++;
+			if (bufferEnd == bufferMax) {
+				bufferEnd = 0;
+			}
+			console.log("roads:",roads);
+			ChangeJSON(roads);
+		}
+		else{
+			console.error(error);
+		}
+		
+	});	
+}
+
+function ChangeJSON(roads){
+	var init_data = [{"type":"FeatureCollection","totalFeatures":0,"features":[],"crs":null},{"crs":{"properties":{"name":"urn:ogc:def:crs:EPSG::4326"},"type":"name"},"features":[],"totalFeatures":0,"type":"FeatureCollection"}];
+	// init_data = JSON.parse(init_data);
+	// console.log(init_data);
+	var roads_num = roads.length;
+	for(var i = 0 ; i < roads_num ; i++){
+		var tmp = [{"properties":{"minzoom":9,"highway":"secondary","osm_id":139339318,"name":"","oneway":""},"geometry":{"coordinates":[],"type":"LineString"},"type":"Feature"}];
+		tmp[0].properties.name = roads[i].name;
+		tmp[0].properties.oneway = roads[i].oneway;
+		for(var j = 0 ; j < roads[i].path.length ; j++){
+			tmp[0].geometry.coordinates.push(roads[i].path[j].substring(0,11));
+		}
+		// console.log(tmp[0].geometry.coordinates);
+		init_data[1].features.push(tmp[0]);
 	}
 
-	var roads = new Array();
-	return mapContract.methods.getRoads(geohash).call(function(error, result){
-                if(!error) {
-                    console.log(result);
-                    var roadInfo = result[0];
-                    var roadName = result[1];
-                    var roadPath = result[2];
-
-                    var pointer = 0;
-                    for (var i = 0; i < roadName.length; i++){
-
-                    }
-
-                    if (bufferNum == bufferMax) {
-                    	delete geo2index[roadsGeoBuffer[bufferEnd]];
-                    	bufferNum--;
-                    }
-                    roadsGeoBuffer[bufferEnd] = geohash;
-                    roadsBuffer[bufferEnd] = roads;
-                    geo2index[geohash] = bufferEnd;
-                    bufferEnd++;
-                    bufferNum++;
-                    if (bufferEnd == bufferMax) {
-                    	bufferEnd = 0;
-                    }
-                    return roads;
-                } else
-                    console.error(error);
-            });	
+	init_data[1].totalFeatures = init_data[1].features.length;
+	map_data = init_data;
+	update_map();
 }
 
 //location buffer
@@ -571,7 +500,9 @@ function match(index) {
 var maxlat, minlat, maxlon, minlon;
 
 // 初始化轨迹
-function initTrace() {	
+function initTrace() {
+	// var tmp = "wx4fbz";
+	// getRoads(tmp);
 	maxlat = 0;
 	minlat = 180;
 	maxlon = 0;
@@ -618,7 +549,7 @@ function initTrace() {
 function initMap() {
 	var tempsum = 0;
 	// initalways 代表的应该是 waysall.js
-	roadNum = initialways.length;
+	roadNum = initialways.length;		
 	for (var i = 0; i < roadNum; i++) {
 		var flag = 0;
 		// 将路线经纬度切分出来
@@ -700,7 +631,6 @@ async function calcNext() {
 	var geohash = locBuffer[nowCalc];
 	var point = L.polyline([geohash,geohash],{color:'#FF0000',fillColor:'#FF0000',fillOpacity:1});
 	map.addLayer(point);
-	console.log(point);
 	// console.log('calcNext()', nowCalc, midLat, midLon);
 	//point.addTo(map);
 
@@ -737,12 +667,13 @@ function sleep(delay) {
 </script>
 </head>
 <body>
+geohash:
+<input type='text' name='hash' id='geohash'/>
+<input type="button" style="width: 120px; height: 30px" value="get roads" onclick="getRoads(document.getElementById('geohash').value)">
 
 <button id="initMap">initMap</button>
 <button id="initTrace">initTrace</button>
-
 <button id="initContract">initContract</button>
-
 <button id="testMatch">testMatch</button>
 <button id="matchAll">matchAll</button>
 <button id="calcNext">calcNext</button>
@@ -750,9 +681,8 @@ function sleep(delay) {
 
 <h2 id="value"></h2>
 
-<!-- <div id="mapDiv" style="width:1600px; height:1000px"></div> -->
-
 <script>
+	 
 	$("#initMap").click(function(){
 		initMap();
 	});
@@ -1035,16 +965,10 @@ function sleep(delay) {
 				}
 			}
 		};
-		
-
-		// var URL = window.location.href;		
-		//geoserver上提供geohashjson的地址，根据geohash值即可得到
-		// var GeohashURL = URL + 'geoserver/h/{z}/{h}';
-		// 实际上此时的GeoHashURL就没有用上，用的还是静态数据
-		// console.log("GeohashURL:",GeohashURL);
-		// console.log("显示底层图形");
-		var GeohashURL =null;
-		var GeohashlowLayer = new L.GeohashLayer.GeoJSON(GeohashURL,{maxZoom:18,minZoom:1},
+		var GeohashlowLayer;
+		var GeohashhighLayer;
+		var GeohashURL = "";
+		GeohashlowLayer = new L.GeohashLayer.GeoJSON(GeohashURL,{maxZoom:18,minZoom:1},
 		{
 			style:mystyle,
 			onEachFeature:myoneach,
@@ -1054,21 +978,37 @@ function sleep(delay) {
 		// console.log("底层图形已显示");
 
 		// console.log("显示高层图形");
-		var GeohashhighLayer = new L.GeohashLayer.GeoJSON(GeohashURL,{maxZoom:18,minZoom:1},
+		
+		GeohashhighLayer = new L.GeohashLayer.GeoJSON(GeohashURL,{maxZoom:18,minZoom:1},
 		{
 			style:mystyle,
 			onEachFeature:myoneach,
 			filter:myHighfilter
 		})
 		map.addLayer(GeohashhighLayer);
-		// console.log("高层图形已显示");
+
+		// var t1=window.setInterval(update_map, 1000);
 		
-		// var tmp_geojson =  ["wx4eqcet93y","wx4eqcet93y"];
-		// var line =  L.polyline(tmp_geojson, {color:'#FF0000',fillColor:'#FF0000',fillOpacity:1});
-		// console.log(line);
-		// map.addLayer(line);
-		// GeohashhighLayer.setZIndex(4);
-		// GeohashlowLayer.setZIndex(3);		
+		function update_map(){
+			console.log("update");
+			map.removeLayer(GeohashlowLayer);
+			map.removeLayer(GeohashhighLayer);
+			GeohashlowLayer = new L.GeohashLayer.GeoJSON(GeohashURL,{maxZoom:18,minZoom:1},
+			{
+				style:mystyle,
+				onEachFeature:myoneach,
+				filter:myLowfilter
+			})
+			map.addLayer(GeohashlowLayer);
+
+			GeohashhighLayer = new L.GeohashLayer.GeoJSON(GeohashURL,{maxZoom:18,minZoom:1},
+			{
+				style:mystyle,
+				onEachFeature:myoneach,
+				filter:myHighfilter
+			})
+			map.addLayer(GeohashhighLayer);
+		}		
 	</script>
 </body>
 </html>
