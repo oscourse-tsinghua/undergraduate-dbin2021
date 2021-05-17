@@ -236,7 +236,7 @@ trafficContract.methods.getQuality(userId).call(function(error, result){
       "number": "0x0",
       "gasUsed": "0x0",
       "parentHash": "0x0000000000000000000000000000000000000000000000000000000000000000"
-    }
+    
     ```
 
   - 初始化私链
@@ -283,7 +283,7 @@ trafficContract.methods.getQuality(userId).call(function(error, result){
 
 测试表明，目前该系统可以成功将地图数据经纬度格式转为`GeoHash`格式，并上传到以太坊私链进行保存。
 
-# 树状区块链
+# 树状区块链应用与测试
 
 ## 背景介绍
 
