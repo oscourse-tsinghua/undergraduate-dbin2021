@@ -1,0 +1,147 @@
+<html><head><meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+    <script type="text/javascript" src="./jquery-3.2.1.min.js"></script>
+    <script type="text/javascript" src="./node_modules/web3/dist/web3.min.js"></script>
+    <script type="text/javascript" src="./common.js"></script>
+    <script type="text/javascript" src="./StoreMap2.js"></script>
+    </head>
+    <body>
+        <form>
+        gid:
+        <input type='text' name='hash' id='gid'/>
+        <input type="button" style="width: 120px; height: 30px" value="get road" onclick="get_road(document.getElementById('gid').value)">  
+        <br><br>
+        geohash:
+        <input type='text' name='hash' id='geohash'/>
+        <input type="button" style="width: 120px; height: 30px" value="get roads" onclick="get_roads(document.getElementById('geohash').value)">
+        <script type="text/javascript">
+
+          
+        //初始化过程
+        if (typeof web3 !== 'undefined') {
+            web3 = new Web3(web3.currentProvider);
+        } else {
+            // set the provider you want from Web3.providers
+            web3 = new Web3(new Web3.providers.HttpProvider("http://localhost:8545"));
+        }
+        var contract_addr = '0xd5ad3dd3a371e63ff8fc9737fd85c9c6107da680';
+        var MyContract = new web3.eth.Contract(mapContractAbi,contract_addr);
+        console.log("ok");
+
+    // console.log(web3.utils.asciiToHex('wx47x9u8gumn'));
+    // var hexString = '0x5e7f573a897f4fa78def';
+    // console.log(web3.utils.hexToAscii(hexString));
+    //map function
+    var roads_buffer = [];//buffer roads in geohash block
+    var geohash_idx = {};//map from hash to index in roads_buffer
+    var buffer_pos = 0;
+    var buffer_size = 50;
+    function get_roads(geo_hash){
+        // console.log("get_roads");
+        //clear buffer if full
+        if(roads_buffer.length > buffer_size){
+            buffer_pos = 0;
+        }
+    
+        if(geo_hash in geohash_idx){
+            return Promise.resolve(roads_buffer[geohash_idx[geo_hash]]);
+        }
+    
+        //not in buffer, get roads from block chain
+        var roads_array = new Array();
+
+        return MyContract.methods.get_types(web3.utils.asciiToHex(geo_hash)).call(function(err,roads){
+            if(!err){   
+                    // console.log(roads);
+                    var road_info = roads[0];
+                    //alert(road_info.length);
+                    var road_name = roads[1];
+                    var road_highway = roads[2];
+                    var road_gtype = roads[3];
+                    var road_path = roads[4];
+                    //alert(road_path);
+                    var pos = 0;//record pointer to read path
+            
+                    for(var i=0; i< road_name.length; i++){
+                        var road = new Object();
+                        road.gid = road_info[i*4].valueOf();
+                        
+                        road.minzoom  = road_info[i*4 + 1].valueOf();
+                        road.oneway = road_info[i*4 + 2].valueOf();
+                        road.building  = road_info[i*4 + 3].valueOf();
+                        road.name = hex2str(road_name[i]);
+                        road.highway = web3.utils.hexToAscii(road_highway[i]);
+                        road.gtype = web3.utils.hexToAscii(road_gtype[i]);
+
+                        road.path = new Array();
+
+                        //read path
+                        var path_num = parseInt(road_path[pos++],16);
+                        // console.log(path_num);
+                        for(var j=0; j< path_num; j++){
+                            var temp = web3.utils.hexToAscii(road_path[pos++]);
+                            // console.log(temp);
+                            road.path.push(temp);
+                        }
+                        roads_array.push(road);
+                        //alert(typeof(road.gid));
+                    }
+                    //buffer
+                    roads_buffer[buffer_pos] = roads_array;
+                    //alert(geohash);
+                    geohash_idx[geo_hash] = buffer_pos;
+                    buffer_pos++;
+                    console.log(roads_array);
+                    return roads_array;
+                }
+                else{
+                    console.error(err);
+                }
+        
+    } ); 
+}
+
+    function get_road(gid){
+        return MyContract.methods.get_onetype(gid).call(function(err,roads){
+            if(!err){   
+                    // console.log(roads);
+                    var road_info = roads[0];
+                    var road_name = roads[1];
+                    var road_highway = web3.utils.hexToAscii(roads[2]);
+                    var road_gtype = web3.utils.hexToAscii(roads[3]);
+                    var road_path = roads[4];
+                    // // console.log("road_info",road_info);
+                    // // console.log("road_name",road_name);
+                    // // console.log("road_path",road_path);
+                    // // console.log("road_name.length:",road_name.length);
+
+                    var road = new Object();
+                    
+                    road.minzoom  = road_info[0].valueOf();
+                    road.oneway = road_info[1].valueOf();
+                    road.building  = road_info[2].valueOf();
+                    road.gtype = road_gtype;
+                    road.highway = road_highway;
+                    road.name = hex2str(road_name);
+                    
+                    road.path = new Array();
+        
+                    //read path
+                    var pos = 0;
+                    // console.log(road_path);
+                    for(var j=0; j< road_path.length; j++){
+                        var temp = web3.utils.hexToAscii(road_path[pos++]);
+                        road.path.push(temp);
+                    }
+                    console.log(road);
+                }
+            else{
+                console.error(err);
+            }
+        
+    } ); 
+}
+    </script>
+    
+    
+    </body></html>
+    
