@@ -162,14 +162,14 @@ function bind_road_geohash(gid, x1, x2, y1, y2, path){
 				hash_array.push(area_geohash5);
 				if(has_intersection(path,area_geohash5,5)){
 					add_area_line(area_geohash5, gid, 300000, 0);
-					console.log("area_geohash6",area_geohash5);
+					console.log("area_geohash5",area_geohash5);
 				}
 			}
 			if(hash_array.indexOf(area_geohash4) == -1){
 				hash_array.push(area_geohash4);
 				if(has_intersection(path,area_geohash4,4)){
 					add_area_line(area_geohash4, gid, 300000, 0);
-					console.log("area_geohash6",area_geohash4);
+					console.log("area_geohash4",area_geohash4);
 				}
 			}
 			
