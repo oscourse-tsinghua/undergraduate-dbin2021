@@ -7,8 +7,8 @@ var MyContract = contract(json);
 MyContract.setProvider(new Web3.providers.HttpProvider("http://localhost:8545"));
 
 // contract address 
-var myContractInstance = MyContract.at("0xd5ad3dd3a371e63ff8fc9737fd85c9c6107da680");
-var account = "0x6f43e4e5b4839f53d9e2d155afc1da49f798d5dc";
+var myContractInstance = MyContract.at("0xa2c1bc04aca298f0e2c6e0ef2bbe561a57fa46d9");
+var account = "0xb75559dec4f548c7acc368e56f772403043d5695";
 
 // read map in json format
 var fs=require('fs');
@@ -22,13 +22,13 @@ var counter = 1;
 
 lineReader.eachLine(map_file, function(line, last, cb) {
 	// wx4er
-	if(counter > 49327){
+	if(counter > 21448){
 		add_map(line);
 	}
     cb();
-	if(counter > 49327){
+	if(counter > 21448){
 		// 1000时间太短，可能不能正常存储
-		sleep(4000);
+		sleep(2000);
 		console.log(counter);
 	}
 	counter++;
@@ -118,7 +118,6 @@ function add_map(line){
 	add_oneline(counter, minzoom, oneway, building, highway, name, line_json.geometry.type, path, gas, 0);
 	// console.log(counter,minzoom,oneway,building,highway,name,line_json.geometry.type,path);
 
-	// console.log(path);
 	//区域绑定
 	hash_array = new Array();
 	if(line_json.geometry.type == "Point" || line_json.geometry.type == "MultiPolygon"){
@@ -150,47 +149,30 @@ function bind_road_geohash(gid, x1, x2, y1, y2, path){
 	//get areas which has intersection with the road. for lon, 0.01 degree is equal to about 1000m and 1113m for lat
 	for(var x = x1; x < max_x + 0.01 && x > min_x - 0.01; x+=0.01 * step_x){
 		for(var y = y1; y < max_y + 0.01 && y > min_y - 0.01; y+=0.01 * step_y){
-			// area_geohash6 = encode_geohash(x,y,6);
 			area_geohash5 = encode_geohash(x,y,5);
-			// area_geohash4 = encode_geohash(x,y,4);
-			// area_geohash3 = encode_geohash(x,y,3);
+			area_geohash4 = encode_geohash(x,y,4);
 
 			//duplicate geohash
 			// 如果里面hash值都找的到
-			// if((hash_array.indexOf(area_geohash6) != -1) && (hash_array.indexOf(area_geohash5) != -1) && (hash_array.indexOf(area_geohash4) != -1) && (hash_array.indexOf(area_geohash3) != -1)){
-			// 	continue;
-			// }
-			if((hash_array.indexOf(area_geohash5) != -1)){
+			if((hash_array.indexOf(area_geohash5) != -1) && (hash_array.indexOf(area_geohash4) != -1)){
 				continue;
 			}
-			// if(hash_array.indexOf(area_geohash6) == -1){
-			// 	hash_array.push(area_geohash6);
-			// 	if(has_intersection(path,area_geohash6,6)){
-			// 		add_area_line(area_geohash6, gid, 150000, 0);
-			// 		console.log("area_geohash6",area_geohash6);
-			// 	}
-			// }
+
 			if(hash_array.indexOf(area_geohash5) == -1){
 				hash_array.push(area_geohash5);
 				if(has_intersection(path,area_geohash5,5)){
-					add_area_line(area_geohash5, gid, 150000, 0);
-					console.log("area_geohash5",area_geohash5);
+					add_area_line(area_geohash5, gid, 300000, 0);
+					console.log("area_geohash6",area_geohash5);
 				}
 			}
-			// if(hash_array.indexOf(area_geohash4) == -1){
-			// 	hash_array.push(area_geohash4);
-			// 	if(has_intersection(path,area_geohash4,4)){
-			// 		add_area_line(area_geohash4, gid, 150000, 0);
-			// 		console.log("area_geohash6",area_geohash4);
-			// 	}
-			// }
-			// if(hash_array.indexOf(area_geohash3) == -1){
-			// 	hash_array.push(area_geohash3);
-			// 	if(has_intersection(path,area_geohash3,3)){
-			// 		add_area_line(area_geohash3, gid, 150000, 0);
-			// 		console.log("area_geohash6",area_geohash3);
-			// 	}
-			// }
+			if(hash_array.indexOf(area_geohash4) == -1){
+				hash_array.push(area_geohash4);
+				if(has_intersection(path,area_geohash4,4)){
+					add_area_line(area_geohash4, gid, 300000, 0);
+					console.log("area_geohash6",area_geohash4);
+				}
+			}
+			
 		}
 	}
 }
@@ -210,38 +192,24 @@ function has_intersection(path,geohash,len){
 function bind_other_geohash(gid, path){
 	// 对于Point和MultiPolygon，直接根据前缀绑定
 	for(var i = 0 ; i < path.length ; i++){
-		// var area_geohash6 = path[i].substring(0,6);
 		var area_geohash5 = path[i].substring(0,5);
-		// var area_geohash4 = path[i].substring(0,4);
-		// var area_geohash3 = path[i].substring(0,3);
+		var area_geohash4 = path[i].substring(0,4);
 
 		// 同一信息避免重复存储至同一区域
-		// if((hash_array.indexOf(area_geohash6) != -1) && (hash_array.indexOf(area_geohash5) != -1) && (hash_array.indexOf(area_geohash4) != -1) && (hash_array.indexOf(area_geohash3) != -1)){
-		// 	continue;
-		// }
-		if((hash_array.indexOf(area_geohash5) != -1)){
+		if((hash_array.indexOf(area_geohash5) != -1) && (hash_array.indexOf(area_geohash4) != -1)){
 			continue;
 		}
-		// if(hash_array.indexOf(area_geohash6) == -1){
-		// 	hash_array.push(area_geohash6);
-		// 	add_area_line(area_geohash6, gid, 150000, 0);
-		// 	console.log("area_geohash6",area_geohash6);
-		// }
 		if(hash_array.indexOf(area_geohash5) == -1){
 			hash_array.push(area_geohash5);
-			add_area_line(area_geohash5, gid, 150000, 0);
+			add_area_line(area_geohash5, gid, 300000, 0);
 			console.log("area_geohash5",area_geohash5);
 		}
-		// if(hash_array.indexOf(area_geohash4) == -1){
-		// 	hash_array.push(area_geohash4);
-		// 	add_area_line(area_geohash4, gid, 150000, 0);
-		// 	console.log("area_geohash4",area_geohash4);
-		// }
-		// if(hash_array.indexOf(area_geohash3) == -1){
-		// 	hash_array.push(area_geohash3);
-		// 	add_area_line(area_geohash3, gid, 150000, 0);
-		// 	console.log("area_geohash3",area_geohash3);
-		// }
+		if(hash_array.indexOf(area_geohash4) == -1){
+			hash_array.push(area_geohash4);
+			add_area_line(area_geohash4, gid, 300000, 0);
+			console.log("area_geohash4",area_geohash4);
+		}
+		
 	}
 }
 
